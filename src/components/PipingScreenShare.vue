@@ -1,6 +1,10 @@
 <template>
   <div>
-    <button v-on:click="shareScreen()">Share</button>
+    <input type="text" v-model="serverUrl"><br>
+    <input type="text" v-model="screenId" placeholder="Input screen ID"><br>
+    <button v-on:click="shareScreen()">Share your screen</button> or
+    <button v-on:click="viewScreen()">View screen</button>
+    <!--  Player  -->
     <div>
       <video ref="video0"></video>
       <video ref="video1" style="display: none"></video>
@@ -13,8 +17,17 @@
 import { Component, Prop, Vue } from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 
+function createServerUrl(baseServerUrl: string, screenId: string, chunkNum: number) {
+  // TODO: Use join-url
+  // TODO: Use digest-hash not to give information for Piping Server
+  return `${baseServerUrl}/screen-share-web/${screenId}/${chunkNum}`;
+}
+
 @Component
 export default class PipingScreenShare extends Vue {
+
+  private serverUrl: string = 'https://ppng.ml';
+  private screenId: string = '';
 
   get video0(): HTMLVideoElement {
     return this.$refs.video0 as HTMLVideoElement;
@@ -31,10 +44,23 @@ export default class PipingScreenShare extends Vue {
     }
 
     const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
-    // TODO: Should check MediaStreamRecorder existence
     const mediaRecorder = new MediaStreamRecorder(stream);
     mediaRecorder.mimeType = 'video/mp4';
 
+    let chunkNum = 1;
+    mediaRecorder.ondataavailable = (blob: Blob) => {
+      // Send a blob
+      fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum), {
+        method: 'POST',
+        body: blob,
+      });
+      chunkNum++;
+    };
+
+    mediaRecorder.start(500);
+  }
+
+  private async viewScreen() {
     // Queue of blob URL
     const blobUrlQueue: string[] = [];
     let active: HTMLVideoElement = this.video0;
@@ -69,41 +95,39 @@ export default class PipingScreenShare extends Vue {
     active.onended = doubleBuffer;
     hidden.onended = doubleBuffer;
 
-    // Handler after queue is filled
-    const ondataavailableAfterQueueFilled = (blob: Blob) => {
-      console.log(blob);
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlQueue.push(blobUrl);
+    let firstPlayDone = false;
 
-      // NOTE: You can chane the threshold >= n
-      if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
-        // Resolve
-        waitDoubleBufferResolve();
-        // Release
-        waitDoubleBufferResolve = null;
+    for (let chunkNum = 1; ; chunkNum++) {
+      // Get a chunk
+      const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum));
+      // Get a blob
+      const blob: Blob = new Blob([await res.arrayBuffer()], {type: 'video/mp4'});
+
+      if (blob.size === 0) {
+        console.log('blob is empty');
+        break;
       }
-    };
 
-    // Handler before queue is filled
-    const ondataavailableBeforeQueueFilled = (blob: Blob) => {
-      console.log(blob);
+      // Push the blob URL
       const blobUrl = URL.createObjectURL(blob);
       blobUrlQueue.push(blobUrl);
 
-      if (blobUrlQueue.length >= 2) {
+      if (!firstPlayDone && blobUrlQueue.length >= 2) {
         // NOTE: There are never undefined logically because the length queue is over 1
         active.src = blobUrlQueue.shift() as string;
         hidden.src = blobUrlQueue.shift() as string;
         active.play();
-
-        // NOTE: Overwrite 'ondataavailable'
-        mediaRecorder.ondataavailable = ondataavailableAfterQueueFilled;
+        firstPlayDone = true;
+      } else {
+        // NOTE: You can chane the threshold >= n
+        if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
+          // Resolve
+          waitDoubleBufferResolve();
+          // Release
+          waitDoubleBufferResolve = null;
+        }
       }
-    };
-
-    mediaRecorder.ondataavailable = ondataavailableBeforeQueueFilled;
-
-    mediaRecorder.start(500);
+    }
   }
 }
 </script>
