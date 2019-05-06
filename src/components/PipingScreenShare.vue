@@ -2,6 +2,7 @@
   <div>
     <input type="text" v-model="serverUrl"><br>
     <input type="text" v-model="screenId" placeholder="Input screen ID"><br>
+    <input type="text" v-model="passphrase" placeholder="Input passphrase"><br>
     <button v-on:click="shareScreen()">Share your screen</button> or
     <button v-on:click="viewScreen()">View screen</button>
     <!--  Player  -->
@@ -17,10 +18,31 @@
 import { Component, Prop, Vue } from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 
+function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const fileReader = new FileReader();
+    fileReader.onload = () => {
+      resolve(fileReader.result as ArrayBuffer);
+    };
+    fileReader.onerror = () => {
+      reject(fileReader.error);
+    };
+    fileReader.readAsArrayBuffer(blob);
+  });
+}
+
 function createServerUrl(baseServerUrl: string, screenId: string, chunkNum: number) {
   // TODO: Use join-url
   // TODO: Use digest-hash not to give information for Piping Server
   return `${baseServerUrl}/screen-share-web/${screenId}/${chunkNum}`;
+}
+
+export async function passphraseToKey(passphrase: string): Promise<Uint8Array> {
+  // Convert passphrase string to Uint8Array
+  const passphraseU8Array: Uint8Array = new TextEncoder().encode(passphrase);
+  // Generate key from passphrase by SHA-2156
+  const key = new Uint8Array(await crypto.subtle.digest('SHA-256', passphraseU8Array));
+  return key;
 }
 
 @Component
@@ -28,6 +50,7 @@ export default class PipingScreenShare extends Vue {
 
   private serverUrl: string = 'https://ppng.ml';
   private screenId: string = '';
+  private passphrase: string = '';
 
   get video0(): HTMLVideoElement {
     return this.$refs.video0 as HTMLVideoElement;
@@ -48,11 +71,27 @@ export default class PipingScreenShare extends Vue {
     mediaRecorder.mimeType = 'video/mp4';
 
     let chunkNum = 1;
-    mediaRecorder.ondataavailable = (blob: Blob) => {
+    mediaRecorder.ondataavailable = async (blob: Blob) => {
+      // Encrypt
+      const passphraseDigest = await passphraseToKey(this.passphrase);
+      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        passphraseDigest,
+        {name: 'AES-GCM', length: 128},
+        false,
+        ['encrypt', 'decrypt'],
+      );
+      const encrypted = await crypto.subtle.encrypt(
+        {name: 'AES-GCM', iv},
+        cryptoKey,
+        new Uint8Array(await blobToArrayBuffer(blob)),
+      );
+
       // Send a blob
       fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum), {
         method: 'POST',
-        body: blob,
+        body: new Blob([iv, encrypted]),
       });
       chunkNum++;
     };
@@ -100,8 +139,26 @@ export default class PipingScreenShare extends Vue {
     for (let chunkNum = 1; ; chunkNum++) {
       // Get a chunk
       const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum));
+
+      const arrayBuffer = await res.arrayBuffer();
+      const iv = arrayBuffer.slice(0, 12);
+      const encrypted = arrayBuffer.slice(12);
+      const passphraseDigest = await passphraseToKey(this.passphrase);
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        passphraseDigest,
+        {name: 'AES-GCM', length: 128},
+        false,
+        ['encrypt', 'decrypt'],
+      );
+      const decrypted: ArrayBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        cryptoKey,
+        encrypted,
+      );
+
       // Get a blob
-      const blob: Blob = new Blob([await res.arrayBuffer()], {type: 'video/mp4'});
+      const blob: Blob = new Blob([decrypted], {type: 'video/mp4'});
 
       if (blob.size === 0) {
         console.log('blob is empty');
