@@ -47,6 +47,8 @@ async function passphraseToKey(passphrase: string): Promise<Uint8Array> {
 
 // AES-GCM (Initial Vector (IV) is attached on the head)
 const IvAesGcm = {
+  ivLen: 12,
+
   async createCryptoKey(passphrase: string): Promise<CryptoKey> {
     const passphraseDigest = await passphraseToKey(passphrase);
     return crypto.subtle.importKey(
@@ -58,18 +60,27 @@ const IvAesGcm = {
     );
   },
 
-  async encrypt(raw: ArrayBuffer, iv: Uint8Array, passphrase: string): Promise<ArrayBuffer> {
-    // Encrypt
+  // NOTE: Return-type of encrypt and decrypt is not symmetric.
+  async encryptAsBlob(raw: ArrayBuffer, passphrase: string): Promise<Blob> {
+    // Create IV
+    const iv = window.crypto.getRandomValues(new Uint8Array(this.ivLen));
+    // Create key from passphrase
     const cryptoKey = await this.createCryptoKey(passphrase);
-    return crypto.subtle.encrypt(
+    // Encrypt
+    const encrypted = await crypto.subtle.encrypt(
       {name: 'AES-GCM', iv},
       cryptoKey,
       raw,
     );
+    return new Blob([iv, encrypted]);
   },
-  async decrypt(encryptedWithIv: ArrayBuffer, passphrase: string): Promise<ArrayBuffer> {
-    const iv = encryptedWithIv.slice(0, 12);
-    const encrypted = encryptedWithIv.slice(12);
+
+  // NOTE: Return-type of encrypt and decrypt is not symmetric.
+  async decryptAsArrayBuffer(encryptedWithIv: ArrayBuffer, passphrase: string): Promise<ArrayBuffer> {
+    // Extract IV and encrypted parts
+    const iv = encryptedWithIv.slice(0, this.ivLen);
+    const encrypted = encryptedWithIv.slice(this.ivLen);
+    // Create key from passphrase
     const cryptoKey = await this.createCryptoKey(passphrase);
     return crypto.subtle.decrypt(
       { name: 'AES-GCM', iv },
@@ -107,17 +118,15 @@ export default class PipingScreenShare extends Vue {
     let chunkNum = 1;
     mediaRecorder.ondataavailable = async (blob: Blob) => {
       // Encrypt
-      const iv = window.crypto.getRandomValues(new Uint8Array(12));
-      const encrypted: ArrayBuffer = await IvAesGcm.encrypt(
+      const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
         await blobToArrayBuffer(blob),
-        iv,
         this.passphrase,
       );
 
       // Send a blob
       fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum), {
         method: 'POST',
-        body: new Blob([iv, encrypted]),
+        body: encryptedBlob,
       });
       chunkNum++;
     };
@@ -167,7 +176,7 @@ export default class PipingScreenShare extends Vue {
       const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum));
 
       // Decrypt
-      const decrypted = await IvAesGcm.decrypt(
+      const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
         await res.arrayBuffer(),
         this.passphrase,
       );
