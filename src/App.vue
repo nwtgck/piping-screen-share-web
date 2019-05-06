@@ -1,17 +1,17 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js + TypeScript App"/>
+    <h1>Piping Screen Share</h1>
+    <PipingScreenShare />
   </div>
 </template>
 
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator';
-import HelloWorld from './components/HelloWorld.vue';
+import PipingScreenShare from './components/PipingScreenShare.vue';
 
 @Component({
   components: {
-    HelloWorld,
+    PipingScreenShare,
   },
 })
 export default class App extends Vue {}
