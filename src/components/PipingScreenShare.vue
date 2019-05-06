@@ -37,13 +37,47 @@ function createServerUrl(baseServerUrl: string, screenId: string, chunkNum: numb
   return `${baseServerUrl}/screen-share-web/${screenId}/${chunkNum}`;
 }
 
-export async function passphraseToKey(passphrase: string): Promise<Uint8Array> {
+async function passphraseToKey(passphrase: string): Promise<Uint8Array> {
   // Convert passphrase string to Uint8Array
   const passphraseU8Array: Uint8Array = new TextEncoder().encode(passphrase);
   // Generate key from passphrase by SHA-2156
   const key = new Uint8Array(await crypto.subtle.digest('SHA-256', passphraseU8Array));
   return key;
 }
+
+// AES-GCM (Initial Vector (IV) is attached on the head)
+const IvAesGcm = {
+  async createCryptoKey(passphrase: string): Promise<CryptoKey> {
+    const passphraseDigest = await passphraseToKey(passphrase);
+    return crypto.subtle.importKey(
+      'raw',
+      passphraseDigest,
+      {name: 'AES-GCM', length: 128},
+      false,
+      ['encrypt', 'decrypt'],
+    );
+  },
+
+  async encrypt(raw: ArrayBuffer, iv: Uint8Array, passphrase: string): Promise<ArrayBuffer> {
+    // Encrypt
+    const cryptoKey = await this.createCryptoKey(passphrase);
+    return crypto.subtle.encrypt(
+      {name: 'AES-GCM', iv},
+      cryptoKey,
+      raw,
+    );
+  },
+  async decrypt(encryptedWithIv: ArrayBuffer, passphrase: string): Promise<ArrayBuffer> {
+    const iv = encryptedWithIv.slice(0, 12);
+    const encrypted = encryptedWithIv.slice(12);
+    const cryptoKey = await this.createCryptoKey(passphrase);
+    return crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      cryptoKey,
+      encrypted,
+    );
+  },
+};
 
 @Component
 export default class PipingScreenShare extends Vue {
@@ -73,19 +107,11 @@ export default class PipingScreenShare extends Vue {
     let chunkNum = 1;
     mediaRecorder.ondataavailable = async (blob: Blob) => {
       // Encrypt
-      const passphraseDigest = await passphraseToKey(this.passphrase);
       const iv = window.crypto.getRandomValues(new Uint8Array(12));
-      const cryptoKey = await crypto.subtle.importKey(
-        'raw',
-        passphraseDigest,
-        {name: 'AES-GCM', length: 128},
-        false,
-        ['encrypt', 'decrypt'],
-      );
-      const encrypted = await crypto.subtle.encrypt(
-        {name: 'AES-GCM', iv},
-        cryptoKey,
-        new Uint8Array(await blobToArrayBuffer(blob)),
+      const encrypted: ArrayBuffer = await IvAesGcm.encrypt(
+        await blobToArrayBuffer(blob),
+        iv,
+        this.passphrase,
       );
 
       // Send a blob
@@ -140,21 +166,10 @@ export default class PipingScreenShare extends Vue {
       // Get a chunk
       const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum));
 
-      const arrayBuffer = await res.arrayBuffer();
-      const iv = arrayBuffer.slice(0, 12);
-      const encrypted = arrayBuffer.slice(12);
-      const passphraseDigest = await passphraseToKey(this.passphrase);
-      const cryptoKey = await crypto.subtle.importKey(
-        'raw',
-        passphraseDigest,
-        {name: 'AES-GCM', length: 128},
-        false,
-        ['encrypt', 'decrypt'],
-      );
-      const decrypted: ArrayBuffer = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
-        cryptoKey,
-        encrypted,
+      // Decrypt
+      const decrypted = await IvAesGcm.decrypt(
+        await res.arrayBuffer(),
+        this.passphrase,
       );
 
       // Get a blob
