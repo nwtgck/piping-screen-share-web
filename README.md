@@ -1,29 +1,9 @@
 # piping-screen-share
+[![Netlify Status](https://api.netlify.com/api/v1/badges/6f5b6274-8d0e-4bd9-96b2-1f05b30ecd2d/deploy-status)](https://app.netlify.com/sites/piping-screen-share/deploys)
 
-## Project setup
-```
-npm install
-```
+Screen Share via Piping Server with End-to-End Encryption
 
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
+![Piping Screen Share Demo](doc_assets/piping-screen-share-demo.gif)
 
-### Compiles and minifies for production
-```
-npm run build
-```
-
-### Run your tests
-```
-npm run test
-```
-
-### Lints and fixes files
-```
-npm run lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+## Application
+<https://piping-screen-share.netlify.com>
