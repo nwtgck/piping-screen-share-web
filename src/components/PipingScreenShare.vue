@@ -1,16 +1,62 @@
 <template>
-  <div>
-    <input type="text" v-model="serverUrl"><br>
-    <input type="text" v-model="screenId" placeholder="Input screen ID"><br>
-    <input type="text" v-model="passphrase" placeholder="Input passphrase"><br>
-    <button v-on:click="shareScreen()">Share your screen</button> or
-    <button v-on:click="viewScreen()">View screen</button>
-    <!--  Player  -->
-    <div>
-      <video ref="video0"></video>
-      <video ref="video1" style="display: none"></video>
-    </div>
-  </div>
+  <v-container fluid text-xs-center>
+    <v-layout row wrap>
+      <!--  Share or View toggle buttons  -->
+      <v-flex xs12 style="margin-bottom: 1em;">
+        <v-btn-toggle v-model="shareOrView" mandatory>
+          <v-btn flat value="share">
+            Share
+            <v-icon right dark>screen_share</v-icon>
+          </v-btn>
+          <v-btn flat value="view">
+            View
+            <v-icon right dark>computer</v-icon>
+          </v-btn>
+        </v-btn-toggle>
+      </v-flex>
+
+      <!-- Player -->
+      <v-flex v-if="shareOrView === 'view'" xs12 sm10 offset-sm1>
+        <video ref="video0" style="display: none"></video>
+        <video ref="video1" style="display: none"></video>
+      </v-flex>
+
+      <v-flex xs12 sm8 offset-sm2 offset-md3 md6>
+        <v-card style="padding: 1em;">
+          <!-- Server URL -->
+          <v-text-field type="text" v-model="serverUrl" label="Server URL" />
+          <!-- Screen ID -->
+          <v-text-field type="text" v-model="screenId" label="Screen ID" placeholder="Input screen ID" />
+          <!-- Passphrase -->
+          <v-text-field label="Passphrase (optional)"
+                        v-model="passphrase"
+                        placeholder="Input passphrase"
+                        :type="showPassphrase ? 'text' : 'password'"
+                        :append-icon="showPassphrase ? 'visibility' : 'visibility_off'"
+                        @click:append="showPassphrase = !showPassphrase"
+          />
+
+          <v-btn v-if="shareOrView === 'share'"
+                 color="primary"
+                 v-on:click="shareScreen()"
+                 block
+                 :disabled="!enableActionButton">
+            Share
+            <v-icon right dark>screen_share</v-icon>
+          </v-btn>
+
+          <v-btn v-if="shareOrView === 'view'"
+                 color="secondary"
+                 v-on:click="viewScreen()"
+                 block
+                 :disabled="!enableActionButton">
+            View
+            <v-icon right dark>computer</v-icon>
+          </v-btn>
+        </v-card>
+      </v-flex>
+    </v-layout>
+  </v-container>
 </template>
 
 <script lang="ts">
@@ -93,9 +139,12 @@ const IvAesGcm = {
 @Component
 export default class PipingScreenShare extends Vue {
 
+  private shareOrView: 'share' | 'view' = 'share';
   private serverUrl: string = 'https://ppng.ml';
   private screenId: string = '';
   private passphrase: string = '';
+  private showPassphrase: boolean = false;
+  private enableActionButton: boolean = true;
 
   get video0(): HTMLVideoElement {
     return this.$refs.video0 as HTMLVideoElement;
@@ -110,6 +159,9 @@ export default class PipingScreenShare extends Vue {
       console.error('getDisplayMedia is required');
       return;
     }
+
+    // Disable the button
+    this.enableActionButton = false;
 
     const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
     const mediaRecorder = new MediaStreamRecorder(stream);
@@ -135,6 +187,9 @@ export default class PipingScreenShare extends Vue {
   }
 
   private async viewScreen() {
+    // Disable the button
+    this.enableActionButton = false;
+
     // Queue of blob URL
     const blobUrlQueue: string[] = [];
     let active: HTMLVideoElement = this.video0;
