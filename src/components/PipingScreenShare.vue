@@ -1,58 +1,62 @@
 <template>
-  <v-layout>
-    <v-flex xs12 sm8 offset-sm2 offset-md3 md6>
+  <v-container fluid text-xs-center>
+    <v-layout row wrap>
       <!--  Share or View toggle buttons  -->
-      <v-btn-toggle v-model="shareOrView" mandatory style="margin: 1.5em 0em;">
-        <v-btn flat value="share">
-          Share
-          <v-icon right dark>screen_share</v-icon>
-        </v-btn>
-        <v-btn flat value="view">
-          View
-          <v-icon right dark>computer</v-icon>
-        </v-btn>
-      </v-btn-toggle>
+      <v-flex xs12 style="margin-bottom: 1em;">
+        <v-btn-toggle v-model="shareOrView" mandatory>
+          <v-btn flat value="share">
+            Share
+            <v-icon right dark>screen_share</v-icon>
+          </v-btn>
+          <v-btn flat value="view">
+            View
+            <v-icon right dark>computer</v-icon>
+          </v-btn>
+        </v-btn-toggle>
+      </v-flex>
 
-      <!--  Player  -->
-      <div v-if="shareOrView === 'view'">
+      <!-- Player -->
+      <v-flex v-if="shareOrView === 'view'" xs12 sm10 offset-sm1>
         <video ref="video0" style="display: none"></video>
         <video ref="video1" style="display: none"></video>
-      </div>
+      </v-flex>
 
-      <v-card style="padding: 1em;">
-        <!-- Server URL -->
-        <v-text-field type="text" v-model="serverUrl" label="Server URL" />
-        <!-- Screen ID -->
-        <v-text-field type="text" v-model="screenId" label="Screen ID" placeholder="Input screen ID" />
-        <!-- Passphrase -->
-        <v-text-field label="Passphrase (optional)"
-                      v-model="passphrase"
-                      placeholder="Input passphrase"
-                      :type="showPassphrase ? 'text' : 'password'"
-                      :append-icon="showPassphrase ? 'visibility' : 'visibility_off'"
-                      @click:append="showPassphrase = !showPassphrase"
-        />
+      <v-flex xs12 sm8 offset-sm2 offset-md3 md6>
+        <v-card style="padding: 1em;">
+          <!-- Server URL -->
+          <v-text-field type="text" v-model="serverUrl" label="Server URL" />
+          <!-- Screen ID -->
+          <v-text-field type="text" v-model="screenId" label="Screen ID" placeholder="Input screen ID" />
+          <!-- Passphrase -->
+          <v-text-field label="Passphrase (optional)"
+                        v-model="passphrase"
+                        placeholder="Input passphrase"
+                        :type="showPassphrase ? 'text' : 'password'"
+                        :append-icon="showPassphrase ? 'visibility' : 'visibility_off'"
+                        @click:append="showPassphrase = !showPassphrase"
+          />
 
-        <v-btn v-if="shareOrView === 'share'"
-               color="primary"
-               v-on:click="shareScreen()"
-               block
-               :disabled="!enableActionButton">
-          Share
-          <v-icon right dark>screen_share</v-icon>
-        </v-btn>
+          <v-btn v-if="shareOrView === 'share'"
+                 color="primary"
+                 v-on:click="shareScreen()"
+                 block
+                 :disabled="!enableActionButton">
+            Share
+            <v-icon right dark>screen_share</v-icon>
+          </v-btn>
 
-        <v-btn v-if="shareOrView === 'view'"
-               color="secondary"
-               v-on:click="viewScreen()"
-               block
-               :disabled="!enableActionButton">
-          View
-          <v-icon right dark>computer</v-icon>
-        </v-btn>
-      </v-card>
-    </v-flex>
-  </v-layout>
+          <v-btn v-if="shareOrView === 'view'"
+                 color="secondary"
+                 v-on:click="viewScreen()"
+                 block
+                 :disabled="!enableActionButton">
+            View
+            <v-icon right dark>computer</v-icon>
+          </v-btn>
+        </v-card>
+      </v-flex>
+    </v-layout>
+  </v-container>
 </template>
 
 <script lang="ts">
