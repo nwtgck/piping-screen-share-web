@@ -140,7 +140,7 @@ export default class PipingScreenShare extends Vue {
   private screenId: string = '';
   private passphrase: string = '';
   private showPassphrase: boolean = false;
-  private enableActionButton: boolean = true; // TODO: Use this
+  private enableActionButton: boolean = true;
 
   get video0(): HTMLVideoElement {
     return this.$refs.video0 as HTMLVideoElement;
@@ -155,6 +155,9 @@ export default class PipingScreenShare extends Vue {
       console.error('getDisplayMedia is required');
       return;
     }
+
+    // Disable the button
+    this.enableActionButton = false;
 
     const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
     const mediaRecorder = new MediaStreamRecorder(stream);
@@ -180,6 +183,9 @@ export default class PipingScreenShare extends Vue {
   }
 
   private async viewScreen() {
+    // Disable the button
+    this.enableActionButton = false;
+
     // Queue of blob URL
     const blobUrlQueue: string[] = [];
     let active: HTMLVideoElement = this.video0;
