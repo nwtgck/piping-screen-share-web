@@ -17,8 +17,16 @@
 
       <!-- Player -->
       <v-flex v-if="shareOrView === 'view'" xs12 sm10 offset-sm1>
-        <video ref="video0" style="display: none"></video>
-        <video ref="video1" style="display: none"></video>
+        <fullscreen ref="fullscreen">
+          <video ref="video0" style="display: none"></video>
+          <video ref="video1" style="display: none"></video>
+        </fullscreen>
+        <!-- Turn fullscreen on -->
+        <v-icon v-if="showFullscreenButton"
+                v-on:click="toggleFullscreen()"
+                style="font-size: 2em;">
+          fullscreen
+        </v-icon>
       </v-flex>
 
       <v-flex xs12 sm8 offset-sm2 offset-md3 md6>
@@ -63,6 +71,7 @@
 /* tslint:disable:no-console */
 import { Component, Prop, Vue } from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
+import Fullscreen from 'vue-fullscreen/src/component.vue';
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
@@ -136,7 +145,11 @@ const IvAesGcm = {
   },
 };
 
-@Component
+@Component({
+  components: {
+    Fullscreen,
+  },
+})
 export default class PipingScreenShare extends Vue {
 
   private shareOrView: 'share' | 'view' = 'share';
@@ -145,6 +158,7 @@ export default class PipingScreenShare extends Vue {
   private passphrase: string = '';
   private showPassphrase: boolean = false;
   private enableActionButton: boolean = true;
+  private showFullscreenButton: boolean = false;
 
   get video0(): HTMLVideoElement {
     return this.$refs.video0 as HTMLVideoElement;
@@ -254,6 +268,8 @@ export default class PipingScreenShare extends Vue {
         hidden.src = blobUrlQueue.shift() as string;
         active.play();
         firstPlayDone = true;
+        // Enable show fullscreen button
+        this.showFullscreenButton = true;
       } else {
         // NOTE: You can chane the threshold >= n
         if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
@@ -264,6 +280,10 @@ export default class PipingScreenShare extends Vue {
         }
       }
     }
+  }
+
+  private toggleFullscreen() {
+    (this.$refs.fullscreen as any).toggle();
   }
 }
 </script>
