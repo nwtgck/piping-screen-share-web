@@ -4,11 +4,11 @@
       <!--  Share or View toggle buttons  -->
       <v-flex xs12 style="margin-bottom: 1em;">
         <v-btn-toggle v-model="shareOrView" mandatory>
-          <v-btn flat value="share">
+          <v-btn text value="share">
             Share
             <v-icon right dark>screen_share</v-icon>
           </v-btn>
-          <v-btn flat value="view">
+          <v-btn text value="view">
             View
             <v-icon right dark>computer</v-icon>
           </v-btn>
