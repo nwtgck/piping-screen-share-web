@@ -23,7 +23,7 @@
     "@vue/cli-plugin-pwa": "^3.10.0",
     "@vue/cli-plugin-typescript": "^3.10.0",
     "@vue/cli-service": "^3.10.0",
-    "sass": "^1.22.9",
+    "sass": "^1.22.10",
     "sass-loader": "^7.1.0",
     "typescript": "^3.5.3",
     "vue-cli-plugin-vuetify": "^0.6.1",
