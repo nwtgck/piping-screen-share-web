@@ -153,7 +153,7 @@ const IvAesGcm = {
 export default class PipingScreenShare extends Vue {
 
   private shareOrView: 'share' | 'view' = 'share';
-  private serverUrl: string = 'https://ppng.ml';
+  private serverUrl: string = 'https://ppng.io';
   private screenId: string = '';
   private passphrase: string = '';
   private showPassphrase: boolean = false;
