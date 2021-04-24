@@ -230,7 +230,7 @@ export default class PipingScreenShare extends Vue {
       // NOTE: It is never undefined logically because the queue is not empty
       const blobUrl: string = blobUrlQueue.shift() as string;
       hidden.src = blobUrl;
-      active.style.display = null;
+      active.style.display = '';
       hidden.style.display = 'none';
     }
 
