@@ -69,7 +69,7 @@
 
 <script lang="ts">
 /* tslint:disable:no-console */
-import { Component, Prop, Vue } from 'vue-property-decorator';
+import {Component, Vue} from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 import Fullscreen from 'vue-fullscreen/src/component.vue';
 import urlJoin from 'url-join';
@@ -145,6 +145,16 @@ const IvAesGcm = {
   },
 };
 
+function encodeSeqNum(seqNum: number): ArrayBuffer {
+  const view = new DataView(new ArrayBuffer(4));
+  view.setUint32(0, seqNum, false);
+  return view.buffer;
+}
+
+function decodeSeqNum(buf: ArrayBuffer): number {
+  return new DataView(buf).getUint32(0, false);
+}
+
 @Component({
   components: {
     Fullscreen,
@@ -184,7 +194,7 @@ export default class PipingScreenShare extends Vue {
     mediaRecorder.ondataavailable = async (blob: Blob) => {
       // Encrypt
       const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
-        await blobToArrayBuffer(blob),
+        await blobToArrayBuffer(new Blob([encodeSeqNum(seqNum), blob])),
         this.passphrase,
       );
 
@@ -213,12 +223,14 @@ export default class PipingScreenShare extends Vue {
     this.enableActionButton = false;
 
     // Queue of blob URL
-    const blobUrlQueue: string[] = [];
+    const blobUrlQueue: Array<{ blobUrl: string, seqNum: number }> = [];
     let active: HTMLVideoElement = this.$refs.video0;
     let hidden: HTMLVideoElement = this.$refs.video1;
 
     // For waiting the buffer filled
     let waitDoubleBufferResolve: (() => void) | null = null;
+    // Played seq number
+    let prevPlayedSeqNum: number | undefined;
 
     // Double-buffered
     async function doubleBuffer() {
@@ -236,7 +248,8 @@ export default class PipingScreenShare extends Vue {
       [active, hidden] = [hidden, active];
       active.play();
       // NOTE: It is never undefined logically because the queue is not empty
-      const blobUrl: string = blobUrlQueue.shift()!;
+      const {blobUrl, seqNum} = blobUrlQueue.shift()!;
+      prevPlayedSeqNum = seqNum;
       hidden.src = blobUrl;
       active.style.display = '';
       hidden.style.display = 'none';
@@ -247,7 +260,6 @@ export default class PipingScreenShare extends Vue {
     hidden.onended = doubleBuffer;
 
     let firstPlayDone = false;
-
 
     for (let cycleNum = 0; ; cycleNum = (cycleNum + 1) % 2) {
       try {
@@ -260,8 +272,16 @@ export default class PipingScreenShare extends Vue {
             this.passphrase,
         );
 
+        // Get seq number
+        const seqNum = decodeSeqNum(decrypted.slice(0, 4));
+
+        // Skip if the screen is older than played one
+        if (prevPlayedSeqNum !== undefined && seqNum < prevPlayedSeqNum) {
+          continue;
+        }
+
         // Get a blob
-        const blob: Blob = new Blob([decrypted], {type: 'video/mp4'});
+        const blob: Blob = new Blob([decrypted.slice(4)], {type: 'video/mp4'});
 
         if (blob.size === 0) {
           console.log('blob is empty');
@@ -270,12 +290,16 @@ export default class PipingScreenShare extends Vue {
 
         // Push the blob URL
         const blobUrl = URL.createObjectURL(blob);
-        blobUrlQueue.push(blobUrl);
+        blobUrlQueue.push({
+          blobUrl,
+          seqNum,
+        });
 
         if (!firstPlayDone && blobUrlQueue.length >= 2) {
           // NOTE: There are never undefined logically because the length queue is over 1
-          active.src = blobUrlQueue.shift()!;
-          hidden.src = blobUrlQueue.shift()!;
+          // FIXME: reorder blob by seq number
+          active.src = blobUrlQueue.shift()!.blobUrl;
+          hidden.src = blobUrlQueue.shift()!.blobUrl;
           active.play();
           firstPlayDone = true;
           // Enable show fullscreen button
