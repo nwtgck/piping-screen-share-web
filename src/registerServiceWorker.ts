@@ -1,6 +1,8 @@
 /* tslint:disable:no-console */
 
-import { register } from 'register-service-worker';
+import { register, unregister } from 'register-service-worker';
+
+unregister();
 
 // NOTE: Disable Service Worker for now
 if (false && process.env.NODE_ENV === 'production') {
