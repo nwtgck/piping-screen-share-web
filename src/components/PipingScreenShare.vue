@@ -151,6 +151,11 @@ const IvAesGcm = {
   },
 })
 export default class PipingScreenShare extends Vue {
+  public readonly $refs!: {
+    video0: HTMLVideoElement,
+    video1: HTMLVideoElement,
+    fullscreen: any,
+  };
 
   private shareOrView: 'share' | 'view' = 'share';
   private serverUrl: string = 'https://ppng.io';
@@ -159,14 +164,6 @@ export default class PipingScreenShare extends Vue {
   private showPassphrase: boolean = false;
   private enableActionButton: boolean = true;
   private showFullscreenButton: boolean = false;
-
-  get video0(): HTMLVideoElement {
-    return this.$refs.video0 as HTMLVideoElement;
-  }
-
-  get video1(): HTMLVideoElement {
-    return this.$refs.video1 as HTMLVideoElement;
-  }
 
   private async shareScreen() {
     if (!('getDisplayMedia' in navigator.mediaDevices)) {
@@ -206,8 +203,8 @@ export default class PipingScreenShare extends Vue {
 
     // Queue of blob URL
     const blobUrlQueue: string[] = [];
-    let active: HTMLVideoElement = this.video0;
-    let hidden: HTMLVideoElement = this.video1;
+    let active: HTMLVideoElement = this.$refs.video0;
+    let hidden: HTMLVideoElement = this.$refs.video1;
 
     // For waiting the buffer filled
     let waitDoubleBufferResolve: (() => void) | null = null;
@@ -283,7 +280,7 @@ export default class PipingScreenShare extends Vue {
   }
 
   private toggleFullscreen() {
-    (this.$refs.fullscreen as any).toggle();
+    this.$refs.fullscreen.toggle();
   }
 }
 </script>
