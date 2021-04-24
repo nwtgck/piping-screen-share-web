@@ -178,7 +178,7 @@ export default class PipingScreenShare extends Vue {
     const mediaRecorder = new MediaStreamRecorder(stream);
     mediaRecorder.mimeType = 'video/mp4';
 
-    let chunkNum = 1;
+    let chunkNum = 0;
     mediaRecorder.ondataavailable = async (blob: Blob) => {
       // Encrypt
       const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
@@ -187,7 +187,7 @@ export default class PipingScreenShare extends Vue {
       );
 
       // Send a blob
-      fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum), {
+      fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum % 2), {
         method: 'POST',
         body: encryptedBlob,
       });
@@ -237,9 +237,9 @@ export default class PipingScreenShare extends Vue {
 
     let firstPlayDone = false;
 
-    for (let chunkNum = 1; ; chunkNum++) {
+    for (let chunkNum = 0; ; chunkNum++) {
       // Get a chunk
-      const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum));
+      const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum % 2));
 
       // Decrypt
       const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
