@@ -261,14 +261,40 @@ export default class PipingScreenShare extends Vue {
 
     let firstPlayDone = false;
 
-    for (let cycleNum = 0; ; cycleNum = (cycleNum + 1) % 2) {
+    const load = async (cycleNum: number): Promise<{res: Response, cycleNum: number}> => {
+      try {
+        const res = await fetch(createServerUrl(this.serverUrl, this.screenId, cycleNum));
+        if (res.status !== 200) {
+          throw new Error(`status is not 200, ${res.status}`);
+        }
+        return {
+          res,
+          cycleNum,
+        };
+      } catch (e) {
+        setTimeout(() => {
+          cyclePromises[cycleNum] = load(cycleNum);
+        }, 1000);
+        throw e;
+      }
+    };
+
+    const cyclePromises: Array<Promise<{res: Response, cycleNum: number}>> = [
+      load(0),
+      load(1),
+    ];
+
+    while (true) {
       try {
         // Get a chunk
-        const res = await fetch(createServerUrl(this.serverUrl, this.screenId, cycleNum));
-
+        const {res, cycleNum} = await Promise.any(cyclePromises);
+        // Get body
+        const encryptedBuffer = await res.arrayBuffer();
+        // Request
+        cyclePromises[cycleNum] = load(cycleNum);
         // Decrypt
         const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
-            await res.arrayBuffer(),
+            encryptedBuffer,
             this.passphrase,
         );
 
