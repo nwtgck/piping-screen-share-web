@@ -225,7 +225,7 @@ export default class PipingScreenShare extends Vue {
       [active, hidden] = [hidden, active];
       active.play();
       // NOTE: It is never undefined logically because the queue is not empty
-      const blobUrl: string = blobUrlQueue.shift() as string;
+      const blobUrl: string = blobUrlQueue.shift()!;
       hidden.src = blobUrl;
       active.style.display = '';
       hidden.style.display = 'none';
@@ -261,8 +261,8 @@ export default class PipingScreenShare extends Vue {
 
       if (!firstPlayDone && blobUrlQueue.length >= 2) {
         // NOTE: There are never undefined logically because the length queue is over 1
-        active.src = blobUrlQueue.shift() as string;
-        hidden.src = blobUrlQueue.shift() as string;
+        active.src = blobUrlQueue.shift()!;
+        hidden.src = blobUrlQueue.shift()!;
         active.play();
         firstPlayDone = true;
         // Enable show fullscreen button
