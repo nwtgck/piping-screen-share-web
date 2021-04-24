@@ -214,7 +214,7 @@ export default class PipingScreenShare extends Vue {
 
     // Double-buffered
     async function doubleBuffer() {
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         if (blobUrlQueue.length === 0) {
           waitDoubleBufferResolve = resolve;
         } else {
