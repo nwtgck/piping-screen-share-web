@@ -69,7 +69,7 @@
 
 <script lang="ts">
 /* tslint:disable:no-console */
-import { Component, Prop, Vue } from 'vue-property-decorator';
+import {Component, Vue} from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 import Fullscreen from 'vue-fullscreen/src/component.vue';
 import urlJoin from 'url-join';
@@ -145,6 +145,16 @@ const IvAesGcm = {
   },
 };
 
+function encodeSeqNum(seqNum: number): ArrayBuffer {
+  const view = new DataView(new ArrayBuffer(4));
+  view.setUint32(0, seqNum, false);
+  return view.buffer;
+}
+
+function decodeSeqNum(buf: ArrayBuffer): number {
+  return new DataView(buf).getUint32(0, false);
+}
+
 @Component({
   components: {
     Fullscreen,
@@ -174,24 +184,35 @@ export default class PipingScreenShare extends Vue {
     // Disable the button
     this.enableActionButton = false;
 
+    const seqNumToAbortController: Map<number, AbortController> = new Map();
+
     const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
     const mediaRecorder = new MediaStreamRecorder(stream);
     mediaRecorder.mimeType = 'video/mp4';
 
-    let chunkNum = 1;
+    let seqNum = 0;
     mediaRecorder.ondataavailable = async (blob: Blob) => {
       // Encrypt
       const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
-        await blobToArrayBuffer(blob),
+        await blobToArrayBuffer(new Blob([encodeSeqNum(seqNum), blob])),
         this.passphrase,
       );
 
+      const existingAbortController: AbortController | undefined = seqNumToAbortController.get(seqNum);
+      if (existingAbortController !== undefined) {
+        seqNumToAbortController.delete(seqNum);
+        existingAbortController.abort();
+      }
+
+      const abortController = new AbortController();
       // Send a blob
-      fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum), {
+      fetch(createServerUrl(this.serverUrl, this.screenId, seqNum % 2), {
         method: 'POST',
         body: encryptedBlob,
+        signal: abortController.signal,
       });
-      chunkNum++;
+      seqNumToAbortController.set(seqNum, abortController);
+      seqNum++;
     };
 
     mediaRecorder.start(500);
@@ -202,12 +223,14 @@ export default class PipingScreenShare extends Vue {
     this.enableActionButton = false;
 
     // Queue of blob URL
-    const blobUrlQueue: string[] = [];
+    const blobUrlQueue: Array<{ blobUrl: string, seqNum: number }> = [];
     let active: HTMLVideoElement = this.$refs.video0;
     let hidden: HTMLVideoElement = this.$refs.video1;
 
     // For waiting the buffer filled
     let waitDoubleBufferResolve: (() => void) | null = null;
+    // Played seq number
+    let prevPlayedSeqNum: number | undefined;
 
     // Double-buffered
     async function doubleBuffer() {
@@ -225,7 +248,8 @@ export default class PipingScreenShare extends Vue {
       [active, hidden] = [hidden, active];
       active.play();
       // NOTE: It is never undefined logically because the queue is not empty
-      const blobUrl: string = blobUrlQueue.shift()!;
+      const {blobUrl, seqNum} = blobUrlQueue.shift()!;
+      prevPlayedSeqNum = seqNum;
       hidden.src = blobUrl;
       active.style.display = '';
       hidden.style.display = 'none';
@@ -237,44 +261,87 @@ export default class PipingScreenShare extends Vue {
 
     let firstPlayDone = false;
 
-    for (let chunkNum = 1; ; chunkNum++) {
-      // Get a chunk
-      const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum));
-
-      // Decrypt
-      const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
-        await res.arrayBuffer(),
-        this.passphrase,
-      );
-
-      // Get a blob
-      const blob: Blob = new Blob([decrypted], {type: 'video/mp4'});
-
-      if (blob.size === 0) {
-        console.log('blob is empty');
-        break;
-      }
-
-      // Push the blob URL
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlQueue.push(blobUrl);
-
-      if (!firstPlayDone && blobUrlQueue.length >= 2) {
-        // NOTE: There are never undefined logically because the length queue is over 1
-        active.src = blobUrlQueue.shift()!;
-        hidden.src = blobUrlQueue.shift()!;
-        active.play();
-        firstPlayDone = true;
-        // Enable show fullscreen button
-        this.showFullscreenButton = true;
-      } else {
-        // NOTE: You can chane the threshold >= n
-        if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
-          // Resolve
-          waitDoubleBufferResolve();
-          // Release
-          waitDoubleBufferResolve = null;
+    const load = async (cycleNum: number): Promise<{res: Response, cycleNum: number}> => {
+      try {
+        const res = await fetch(createServerUrl(this.serverUrl, this.screenId, cycleNum));
+        if (res.status !== 200) {
+          throw new Error(`status is not 200, ${res.status}`);
         }
+        return {
+          res,
+          cycleNum,
+        };
+      } catch (e) {
+        setTimeout(() => {
+          cyclePromises[cycleNum] = load(cycleNum);
+        }, 1000);
+        throw e;
+      }
+    };
+
+    const cyclePromises: Array<Promise<{res: Response, cycleNum: number}>> = [
+      load(0),
+      load(1),
+    ];
+
+    while (true) {
+      try {
+        // Get a chunk
+        const {res, cycleNum} = await Promise.any(cyclePromises);
+        // Get body
+        const encryptedBuffer = await res.arrayBuffer();
+        // Request
+        cyclePromises[cycleNum] = load(cycleNum);
+        // Decrypt
+        const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
+            encryptedBuffer,
+            this.passphrase,
+        );
+
+        // Get seq number
+        const seqNum = decodeSeqNum(decrypted.slice(0, 4));
+
+        // Skip if the screen is older than played one
+        if (prevPlayedSeqNum !== undefined && seqNum < prevPlayedSeqNum) {
+          continue;
+        }
+
+        // Get a blob
+        const blob: Blob = new Blob([decrypted.slice(4)], {type: 'video/mp4'});
+
+        if (blob.size === 0) {
+          console.log('blob is empty');
+          break;
+        }
+
+        // Push the blob URL
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlQueue.push({
+          blobUrl,
+          seqNum,
+        });
+
+        if (!firstPlayDone && blobUrlQueue.length >= 2) {
+          // NOTE: There are never undefined logically because the length queue is over 1
+          // FIXME: reorder blob by seq number
+          active.src = blobUrlQueue.shift()!.blobUrl;
+          hidden.src = blobUrlQueue.shift()!.blobUrl;
+          active.play();
+          firstPlayDone = true;
+          // Enable show fullscreen button
+          this.showFullscreenButton = true;
+        } else {
+          // NOTE: You can chane the threshold >= n
+          if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
+            // Resolve
+            waitDoubleBufferResolve();
+            // Release
+            waitDoubleBufferResolve = null;
+          }
+        }
+      } catch (e) {
+        console.error(e);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
   }
