@@ -72,6 +72,7 @@
 import { Component, Prop, Vue } from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 import Fullscreen from 'vue-fullscreen/src/component.vue';
+import urlJoin from 'url-join';
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
@@ -87,9 +88,8 @@ function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
 }
 
 function createServerUrl(baseServerUrl: string, screenId: string, chunkNum: number) {
-  // TODO: Use join-url
   // TODO: Use digest-hash not to give information for Piping Server
-  return `${baseServerUrl}/screen-share-web/${screenId}/${chunkNum}`;
+  return urlJoin(baseServerUrl, `screen-share-web/${screenId}/${chunkNum}`);
 }
 
 async function passphraseToKey(passphrase: string): Promise<Uint8Array> {
