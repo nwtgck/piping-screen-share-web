@@ -174,11 +174,13 @@ export default class PipingScreenShare extends Vue {
     // Disable the button
     this.enableActionButton = false;
 
+    const seqNumToAbortController: Map<number, AbortController> = new Map();
+
     const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
     const mediaRecorder = new MediaStreamRecorder(stream);
     mediaRecorder.mimeType = 'video/mp4';
 
-    let chunkNum = 0;
+    let seqNum = 0;
     mediaRecorder.ondataavailable = async (blob: Blob) => {
       // Encrypt
       const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
@@ -186,12 +188,21 @@ export default class PipingScreenShare extends Vue {
         this.passphrase,
       );
 
+      const existingAbortController: AbortController | undefined = seqNumToAbortController.get(seqNum);
+      if (existingAbortController !== undefined) {
+        seqNumToAbortController.delete(seqNum);
+        existingAbortController.abort();
+      }
+
+      const abortController = new AbortController();
       // Send a blob
-      fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum % 2), {
+      fetch(createServerUrl(this.serverUrl, this.screenId, seqNum % 2), {
         method: 'POST',
         body: encryptedBlob,
+        signal: abortController.signal,
       });
-      chunkNum++;
+      seqNumToAbortController.set(seqNum, abortController);
+      seqNum++;
     };
 
     mediaRecorder.start(500);
@@ -237,44 +248,50 @@ export default class PipingScreenShare extends Vue {
 
     let firstPlayDone = false;
 
-    for (let chunkNum = 0; ; chunkNum++) {
-      // Get a chunk
-      const res = await fetch(createServerUrl(this.serverUrl, this.screenId, chunkNum % 2));
 
-      // Decrypt
-      const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
-        await res.arrayBuffer(),
-        this.passphrase,
-      );
+    for (let cycleNum = 0; ; cycleNum = (cycleNum + 1) % 2) {
+      try {
+        // Get a chunk
+        const res = await fetch(createServerUrl(this.serverUrl, this.screenId, cycleNum));
 
-      // Get a blob
-      const blob: Blob = new Blob([decrypted], {type: 'video/mp4'});
+        // Decrypt
+        const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
+            await res.arrayBuffer(),
+            this.passphrase,
+        );
 
-      if (blob.size === 0) {
-        console.log('blob is empty');
-        break;
-      }
+        // Get a blob
+        const blob: Blob = new Blob([decrypted], {type: 'video/mp4'});
 
-      // Push the blob URL
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlQueue.push(blobUrl);
-
-      if (!firstPlayDone && blobUrlQueue.length >= 2) {
-        // NOTE: There are never undefined logically because the length queue is over 1
-        active.src = blobUrlQueue.shift()!;
-        hidden.src = blobUrlQueue.shift()!;
-        active.play();
-        firstPlayDone = true;
-        // Enable show fullscreen button
-        this.showFullscreenButton = true;
-      } else {
-        // NOTE: You can chane the threshold >= n
-        if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
-          // Resolve
-          waitDoubleBufferResolve();
-          // Release
-          waitDoubleBufferResolve = null;
+        if (blob.size === 0) {
+          console.log('blob is empty');
+          break;
         }
+
+        // Push the blob URL
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlQueue.push(blobUrl);
+
+        if (!firstPlayDone && blobUrlQueue.length >= 2) {
+          // NOTE: There are never undefined logically because the length queue is over 1
+          active.src = blobUrlQueue.shift()!;
+          hidden.src = blobUrlQueue.shift()!;
+          active.play();
+          firstPlayDone = true;
+          // Enable show fullscreen button
+          this.showFullscreenButton = true;
+        } else {
+          // NOTE: You can chane the threshold >= n
+          if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
+            // Resolve
+            waitDoubleBufferResolve();
+            // Release
+            waitDoubleBufferResolve = null;
+          }
+        }
+      } catch (e) {
+        console.error(e);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
   }
