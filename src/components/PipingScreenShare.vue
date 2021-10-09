@@ -73,6 +73,7 @@ import {Component, Vue} from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 import Fullscreen from 'vue-fullscreen/src/component.vue';
 import urlJoin from 'url-join';
+import * as t from 'io-ts';
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
@@ -155,6 +156,11 @@ function decodeSeqNum(buf: ArrayBuffer): number {
   return new DataView(buf).getUint32(0, false);
 }
 
+function parseHashAsQuery(): URLSearchParams {
+  const url = new URL(`a://a${location.hash.substring(1)}`);
+  return url.searchParams;
+}
+
 @Component({
   components: {
     Fullscreen,
@@ -167,9 +173,19 @@ export default class PipingScreenShare extends Vue {
     fullscreen: any,
   };
 
-  private shareOrView: 'share' | 'view' = 'share';
-  private serverUrl: string = 'https://ppng.io';
-  private screenId: string = '';
+  private shareOrView: 'share' | 'view' = (() => {
+    const type = parseHashAsQuery().get('type');
+    if (type === null) {
+      return 'share' as const;
+    }
+    const typeEither = t.union([t.literal('share'), t.literal('view')]).decode(type);
+    if (typeEither._tag === 'Left') {
+      return 'share' as const;
+    }
+    return typeEither.right;
+  })();
+  private serverUrl: string = parseHashAsQuery().get('server') ?? 'https://ppng.io';
+  private screenId: string = parseHashAsQuery().get('screen_id') ?? '';
   private passphrase: string = '';
   private showPassphrase: boolean = false;
   private enableActionButton: boolean = true;

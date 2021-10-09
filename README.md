@@ -8,3 +8,7 @@ Screen Share via [Piping Server](https://github.com/nwtgck/piping-server) with E
 
 ## Application
 <https://piping-screen-share.netlify.com>
+
+## URL fragment parameters
+
+e.g. <https://piping-screen-share.nwtgck.org//#?server=https://ppng.io&type=share&screen_id=myid1234>
