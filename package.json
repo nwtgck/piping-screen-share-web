@@ -19,7 +19,7 @@
     "vue-class-component": "^7.2.6",
     "vue-fullscreen": "^2.3.5",
     "vue-property-decorator": "^8.5.1",
-    "vuetify": "^2.4.11"
+    "vuetify": "^2.6.0"
   },
   "devDependencies": {
     "@types/url-join": "^4.0.0",
