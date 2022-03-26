@@ -6,15 +6,14 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue } from 'vue-property-decorator';
+import { defineComponent } from '@vue/composition-api';
 import PipingScreenShare from './components/PipingScreenShare.vue';
 
-@Component({
+export default defineComponent({
   components: {
     PipingScreenShare,
   },
-})
-export default class App extends Vue {}
+});
 </script>
 
 <style>
