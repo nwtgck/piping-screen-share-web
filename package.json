@@ -17,7 +17,7 @@
     "url-join": "^5.0.0",
     "vue": "^2.6.12",
     "vue-class-component": "^7.2.6",
-    "vue-fullscreen": "^2.3.5",
+    "vue-fullscreen": "^2.6.1",
     "vue-property-decorator": "^8.5.1",
     "vuetify": "^2.6.4"
   },
