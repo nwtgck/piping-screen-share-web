@@ -17,13 +17,13 @@
 
       <!-- Player -->
       <v-flex v-if="shareOrView === 'view'" xs12 sm10 offset-sm1>
-        <fullscreen ref="fullscreen">
+        <div ref="videoContainer">
           <video ref="video0" style="display: none"></video>
           <video ref="video1" style="display: none"></video>
-        </fullscreen>
+        </div>
         <!-- Turn fullscreen on -->
         <v-icon v-if="showFullscreenButton"
-                v-on:click="toggleFullscreen()"
+                v-on:click="fullScreen()"
                 style="font-size: 2em;">
           fullscreen
         </v-icon>
@@ -71,9 +71,9 @@
 /* tslint:disable:no-console */
 import {Component, Vue} from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
-import Fullscreen from 'vue-fullscreen/src/component.vue';
 import urlJoin from 'url-join';
 import * as t from 'io-ts';
+import screenfull from 'screenfull';
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
@@ -163,14 +163,13 @@ function parseHashAsQuery(): URLSearchParams {
 
 @Component({
   components: {
-    Fullscreen,
   },
 })
 export default class PipingScreenShare extends Vue {
   public readonly $refs!: {
     video0: HTMLVideoElement,
     video1: HTMLVideoElement,
-    fullscreen: any,
+    videoContainer: any,
   };
 
   private shareOrView: 'share' | 'view' = (() => {
@@ -362,8 +361,12 @@ export default class PipingScreenShare extends Vue {
     }
   }
 
-  private toggleFullscreen() {
-    this.$refs.fullscreen.toggle();
+  private fullScreen() {
+    if (screenfull.isEnabled) {
+      screenfull.request(this.$refs.videoContainer);
+    } else {
+      console.warn("full screen is not enabled");
+    }
   }
 }
 </script>
