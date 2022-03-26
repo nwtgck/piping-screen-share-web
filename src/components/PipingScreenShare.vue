@@ -349,7 +349,7 @@ export default class PipingScreenShare extends Vue {
           // NOTE: You can chane the threshold >= n
           if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
             // Resolve
-            waitDoubleBufferResolve();
+            (waitDoubleBufferResolve as () => void)();
             // Release
             waitDoubleBufferResolve = null;
           }
