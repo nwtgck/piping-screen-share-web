@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "core-js": "^3.6.5",
-    "fp-ts": "^2.11.4",
+    "fp-ts": "^2.11.9",
     "io-ts": "^2.2.16",
     "material-design-icons-iconfont": "^5.0.1",
     "msr": "^1.3.4",
