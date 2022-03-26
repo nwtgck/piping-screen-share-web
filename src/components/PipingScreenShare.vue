@@ -70,7 +70,6 @@
 <script lang="ts">
 /* tslint:disable:no-console */
 import { defineComponent, ref } from '@vue/composition-api';
-import {Component, Vue} from 'vue-property-decorator';
 import MediaStreamRecorder from 'msr';
 import urlJoin from 'url-join';
 import * as t from 'io-ts';
