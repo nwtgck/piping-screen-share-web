@@ -24,7 +24,7 @@
     "@types/url-join": "^4.0.0",
     "@vue/cli-plugin-babel": "^5.0.4",
     "@vue/cli-plugin-pwa": "^5.0.4",
-    "@vue/cli-plugin-typescript": "^5.0.4",
+    "@vue/cli-plugin-typescript": "^5.0.6",
     "@vue/cli-service": "^5.0.4",
     "sass": "^1.32.11",
     "sass-loader": "^7.3.1",
