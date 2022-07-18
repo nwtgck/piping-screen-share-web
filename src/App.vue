@@ -6,7 +6,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from '@vue/composition-api';
+import { defineComponent } from 'vue';
 import PipingScreenShare from './components/PipingScreenShare.vue';
 
 export default defineComponent({
