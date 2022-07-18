@@ -20,7 +20,7 @@
     "vuetify": "^2.6.7"
   },
   "devDependencies": {
-    "@types/url-join": "^4.0.0",
+    "@types/url-join": "^4.0.1",
     "@vue/cli-plugin-babel": "^5.0.8",
     "@vue/cli-plugin-pwa": "^5.0.8",
     "@vue/cli-plugin-typescript": "^5.0.8",
