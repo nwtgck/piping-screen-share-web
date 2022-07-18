@@ -67,9 +67,9 @@
   </v-container>
 </template>
 
-<script lang="ts">
+<script setup lang="ts">
 /* tslint:disable:no-console */
-import { defineComponent, ref } from 'vue';
+import { ref } from 'vue';
 import MediaStreamRecorder from 'msr';
 import urlJoin from 'url-join';
 import * as t from 'io-ts';
@@ -161,227 +161,207 @@ function parseHashAsQuery(): URLSearchParams {
   return url.searchParams;
 }
 
-export default defineComponent({
-  setup(props, context) {
-    const video0Ref = ref<HTMLVideoElement>();
-    const video1Ref = ref<HTMLVideoElement>();
-    const videoContainerRef = ref<HTMLDivElement>();
+const video0Ref = ref<HTMLVideoElement>();
+const video1Ref = ref<HTMLVideoElement>();
+const videoContainerRef = ref<HTMLDivElement>();
 
-    const shareOrView = ref<'share' | 'view'>((() => {
-      const type = parseHashAsQuery().get('type');
-      if (type === null) {
-        return 'share' as const;
-      }
-      const typeEither = t.union([t.literal('share'), t.literal('view')]).decode(type);
-      if (typeEither._tag === 'Left') {
-        return 'share' as const;
-      }
-      return typeEither.right;
-    })());
-
-    const serverUrl = ref<string>(parseHashAsQuery().get('server') ?? 'https://ppng.io');
-    const screenId = ref<string>(parseHashAsQuery().get('screen_id') ?? '');
-    const passphrase = ref<string>('');
-    const showPassphrase = ref<boolean>(false);
-    const enableActionButton = ref<boolean>(true);
-    const showFullscreenButton = ref<boolean>(false);
-
-    async function shareScreen() {
-      if (!('getDisplayMedia' in navigator.mediaDevices)) {
-        console.error('getDisplayMedia is required');
-        return;
-      }
-
-      // Disable the button
-      enableActionButton.value = false;
-
-      const seqNumToAbortController: Map<number, AbortController> = new Map();
-
-      const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
-      const mediaRecorder = new MediaStreamRecorder(stream);
-      mediaRecorder.mimeType = 'video/mp4';
-
-      let seqNum = 0;
-      mediaRecorder.ondataavailable = async (blob: Blob) => {
-        // Encrypt
-        const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
-            await blobToArrayBuffer(new Blob([encodeSeqNum(seqNum), blob])),
-            passphrase.value,
-        );
-
-        const existingAbortController: AbortController | undefined = seqNumToAbortController.get(seqNum);
-        if (existingAbortController !== undefined) {
-          seqNumToAbortController.delete(seqNum);
-          existingAbortController.abort();
-        }
-
-        const abortController = new AbortController();
-        // Send a blob
-        fetch(createServerUrl(serverUrl.value, screenId.value, seqNum % 2), {
-          method: 'POST',
-          body: encryptedBlob,
-          signal: abortController.signal,
-        });
-        seqNumToAbortController.set(seqNum, abortController);
-        seqNum++;
-      };
-
-      mediaRecorder.start(500);
-    }
-
-    async function viewScreen() {
-      // Disable the button
-      enableActionButton.value = false;
-
-      // Queue of blob URL
-      const blobUrlQueue: Array<{ blobUrl: string, seqNum: number }> = [];
-      let active: HTMLVideoElement = video0Ref.value!;
-      let hidden: HTMLVideoElement = video1Ref.value!;
-
-      // For waiting the buffer filled
-      let waitDoubleBufferResolve: (() => void) | null = null;
-      // Played seq number
-      let prevPlayedSeqNum: number | undefined;
-
-      // Double-buffered
-      async function doubleBuffer() {
-        await new Promise<void>((resolve) => {
-          if (blobUrlQueue.length === 0) {
-            waitDoubleBufferResolve = resolve;
-          } else {
-            resolve();
-          }
-        });
-        console.log('double buffer called');
-        // Revoke active blob URL because its play has ended
-        URL.revokeObjectURL(active.src);
-        // Swap video elements
-        [active, hidden] = [hidden, active];
-        active.play();
-        // NOTE: It is never undefined logically because the queue is not empty
-        const {blobUrl, seqNum} = blobUrlQueue.shift()!;
-        prevPlayedSeqNum = seqNum;
-        hidden.src = blobUrl;
-        active.style.display = '';
-        hidden.style.display = 'none';
-      }
-
-      // Subscribe ended
-      active.onended = doubleBuffer;
-      hidden.onended = doubleBuffer;
-
-      let firstPlayDone = false;
-
-      const load = async (cycleNum: number): Promise<{res: Response, cycleNum: number}> => {
-        try {
-          const res = await fetch(createServerUrl(serverUrl.value, screenId.value, cycleNum));
-          if (res.status !== 200) {
-            throw new Error(`status is not 200, ${res.status}`);
-          }
-          return {
-            res,
-            cycleNum,
-          };
-        } catch (e) {
-          setTimeout(() => {
-            cyclePromises[cycleNum] = load(cycleNum);
-          }, 1000);
-          throw e;
-        }
-      };
-
-      const cyclePromises: Array<Promise<{res: Response, cycleNum: number}>> = [
-        load(0),
-        load(1),
-      ];
-
-      while (true) {
-        try {
-          // Get a chunk
-          const {res, cycleNum} = await Promise.any(cyclePromises);
-          // Get body
-          const encryptedBuffer = await res.arrayBuffer();
-          // Request
-          cyclePromises[cycleNum] = load(cycleNum);
-          // Decrypt
-          const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
-              encryptedBuffer,
-              passphrase.value,
-          );
-
-          // Get seq number
-          const seqNum = decodeSeqNum(decrypted.slice(0, 4));
-
-          // Skip if the screen is older than played one
-          if (prevPlayedSeqNum !== undefined && seqNum < prevPlayedSeqNum) {
-            continue;
-          }
-
-          // Get a blob
-          const blob: Blob = new Blob([decrypted.slice(4)], {type: 'video/mp4'});
-
-          if (blob.size === 0) {
-            console.log('blob is empty');
-            break;
-          }
-
-          // Push the blob URL
-          const blobUrl = URL.createObjectURL(blob);
-          blobUrlQueue.push({
-            blobUrl,
-            seqNum,
-          });
-
-          if (!firstPlayDone && blobUrlQueue.length >= 2) {
-            // NOTE: There are never undefined logically because the length queue is over 1
-            // FIXME: reorder blob by seq number
-            active.src = blobUrlQueue.shift()!.blobUrl;
-            hidden.src = blobUrlQueue.shift()!.blobUrl;
-            active.play();
-            firstPlayDone = true;
-            // Enable show fullscreen button
-            showFullscreenButton.value = true;
-          } else {
-            // NOTE: You can chane the threshold >= n
-            if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
-              // Resolve
-              (waitDoubleBufferResolve as () => void)();
-              // Release
-              waitDoubleBufferResolve = null;
-            }
-          }
-        } catch (e) {
-          console.error(e);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-      }
-    }
-
-    function fullScreen() {
-      if (screenfull.isEnabled) {
-        screenfull.request(videoContainerRef.value!);
-      } else {
-        console.warn("full screen is not enabled");
-      }
-    }
-
-    return {
-      video0Ref,
-      video1Ref,
-      videoContainerRef,
-      shareOrView,
-      serverUrl,
-      screenId,
-      passphrase,
-      showPassphrase,
-      enableActionButton,
-      showFullscreenButton,
-      shareScreen,
-      viewScreen,
-      fullScreen,
-    };
+const shareOrView = ref<'share' | 'view'>((() => {
+  const type = parseHashAsQuery().get('type');
+  if (type === null) {
+    return 'share' as const;
   }
-});
+  const typeEither = t.union([t.literal('share'), t.literal('view')]).decode(type);
+  if (typeEither._tag === 'Left') {
+    return 'share' as const;
+  }
+  return typeEither.right;
+})());
+
+const serverUrl = ref<string>(parseHashAsQuery().get('server') ?? 'https://ppng.io');
+const screenId = ref<string>(parseHashAsQuery().get('screen_id') ?? '');
+const passphrase = ref<string>('');
+const showPassphrase = ref<boolean>(false);
+const enableActionButton = ref<boolean>(true);
+const showFullscreenButton = ref<boolean>(false);
+
+async function shareScreen() {
+  if (!('getDisplayMedia' in navigator.mediaDevices)) {
+    console.error('getDisplayMedia is required');
+    return;
+  }
+
+  // Disable the button
+  enableActionButton.value = false;
+
+  const seqNumToAbortController: Map<number, AbortController> = new Map();
+
+  const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
+  const mediaRecorder = new MediaStreamRecorder(stream);
+  mediaRecorder.mimeType = 'video/mp4';
+
+  let seqNum = 0;
+  mediaRecorder.ondataavailable = async (blob: Blob) => {
+    // Encrypt
+    const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
+        await blobToArrayBuffer(new Blob([encodeSeqNum(seqNum), blob])),
+        passphrase.value,
+    );
+
+    const existingAbortController: AbortController | undefined = seqNumToAbortController.get(seqNum);
+    if (existingAbortController !== undefined) {
+      seqNumToAbortController.delete(seqNum);
+      existingAbortController.abort();
+    }
+
+    const abortController = new AbortController();
+    // Send a blob
+    fetch(createServerUrl(serverUrl.value, screenId.value, seqNum % 2), {
+      method: 'POST',
+      body: encryptedBlob,
+      signal: abortController.signal,
+    });
+    seqNumToAbortController.set(seqNum, abortController);
+    seqNum++;
+  };
+
+  mediaRecorder.start(500);
+}
+
+async function viewScreen() {
+  // Disable the button
+  enableActionButton.value = false;
+
+  // Queue of blob URL
+  const blobUrlQueue: Array<{ blobUrl: string, seqNum: number }> = [];
+  let active: HTMLVideoElement = video0Ref.value!;
+  let hidden: HTMLVideoElement = video1Ref.value!;
+
+  // For waiting the buffer filled
+  let waitDoubleBufferResolve: (() => void) | null = null;
+  // Played seq number
+  let prevPlayedSeqNum: number | undefined;
+
+  // Double-buffered
+  async function doubleBuffer() {
+    await new Promise<void>((resolve) => {
+      if (blobUrlQueue.length === 0) {
+        waitDoubleBufferResolve = resolve;
+      } else {
+        resolve();
+      }
+    });
+    console.log('double buffer called');
+    // Revoke active blob URL because its play has ended
+    URL.revokeObjectURL(active.src);
+    // Swap video elements
+    [active, hidden] = [hidden, active];
+    active.play();
+    // NOTE: It is never undefined logically because the queue is not empty
+    const {blobUrl, seqNum} = blobUrlQueue.shift()!;
+    prevPlayedSeqNum = seqNum;
+    hidden.src = blobUrl;
+    active.style.display = '';
+    hidden.style.display = 'none';
+  }
+
+  // Subscribe ended
+  active.onended = doubleBuffer;
+  hidden.onended = doubleBuffer;
+
+  let firstPlayDone = false;
+
+  const load = async (cycleNum: number): Promise<{res: Response, cycleNum: number}> => {
+    try {
+      const res = await fetch(createServerUrl(serverUrl.value, screenId.value, cycleNum));
+      if (res.status !== 200) {
+        throw new Error(`status is not 200, ${res.status}`);
+      }
+      return {
+        res,
+        cycleNum,
+      };
+    } catch (e) {
+      setTimeout(() => {
+        cyclePromises[cycleNum] = load(cycleNum);
+      }, 1000);
+      throw e;
+    }
+  };
+
+  const cyclePromises: Array<Promise<{res: Response, cycleNum: number}>> = [
+    load(0),
+    load(1),
+  ];
+
+  while (true) {
+    try {
+      // Get a chunk
+      const {res, cycleNum} = await Promise.any(cyclePromises);
+      // Get body
+      const encryptedBuffer = await res.arrayBuffer();
+      // Request
+      cyclePromises[cycleNum] = load(cycleNum);
+      // Decrypt
+      const decrypted: ArrayBuffer = await IvAesGcm.decryptAsArrayBuffer(
+          encryptedBuffer,
+          passphrase.value,
+      );
+
+      // Get seq number
+      const seqNum = decodeSeqNum(decrypted.slice(0, 4));
+
+      // Skip if the screen is older than played one
+      if (prevPlayedSeqNum !== undefined && seqNum < prevPlayedSeqNum) {
+        continue;
+      }
+
+      // Get a blob
+      const blob: Blob = new Blob([decrypted.slice(4)], {type: 'video/mp4'});
+
+      if (blob.size === 0) {
+        console.log('blob is empty');
+        break;
+      }
+
+      // Push the blob URL
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlQueue.push({
+        blobUrl,
+        seqNum,
+      });
+
+      if (!firstPlayDone && blobUrlQueue.length >= 2) {
+        // NOTE: There are never undefined logically because the length queue is over 1
+        // FIXME: reorder blob by seq number
+        active.src = blobUrlQueue.shift()!.blobUrl;
+        hidden.src = blobUrlQueue.shift()!.blobUrl;
+        active.play();
+        firstPlayDone = true;
+        // Enable show fullscreen button
+        showFullscreenButton.value = true;
+      } else {
+        // NOTE: You can chane the threshold >= n
+        if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
+          // Resolve
+          (waitDoubleBufferResolve as () => void)();
+          // Release
+          waitDoubleBufferResolve = null;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+function fullScreen() {
+  if (screenfull.isEnabled) {
+    screenfull.request(videoContainerRef.value!);
+  } else {
+    console.warn("full screen is not enabled");
+  }
+}
 </script>
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
