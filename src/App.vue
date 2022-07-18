@@ -5,15 +5,9 @@
   </v-app>
 </template>
 
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
 import PipingScreenShare from './components/PipingScreenShare.vue';
 
-export default defineComponent({
-  components: {
-    PipingScreenShare,
-  },
-});
 </script>
 
 <style>
