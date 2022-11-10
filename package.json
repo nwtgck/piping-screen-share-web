@@ -16,7 +16,7 @@
     "register-service-worker": "^1.7.2",
     "screenfull": "^6.0.1",
     "url-join": "^5.0.0",
-    "vue": "^2.7.7",
+    "vue": "^2.7.14",
     "vuetify": "^2.6.7"
   },
   "devDependencies": {
