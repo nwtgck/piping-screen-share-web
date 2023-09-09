@@ -2,6 +2,10 @@ name: Build and Deploy to Netlify
 on:
   push:
 
+permissions:
+  statuses: write
+  deployments: write
+
 jobs:
   build:
     runs-on: ubuntu-20.04
