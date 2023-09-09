@@ -1,22 +1,22 @@
 <template>
-  <v-container fluid text-xs-center>
-    <v-layout row wrap>
+  <v-container text-xs-center>
+    <v-row wrap>
       <!--  Share or View toggle buttons  -->
-      <v-flex xs12 style="margin-bottom: 1em;">
+      <v-container xs12 style="margin-bottom: 1em;">
         <v-btn-toggle v-model="shareOrView" mandatory>
-          <v-btn text value="share">
+          <v-btn variant="text" value="share">
             Share
-            <v-icon right dark>screen_share</v-icon>
+            <v-icon right dark>{{ mdiMonitorShare }}</v-icon>
           </v-btn>
-          <v-btn text value="view">
+          <v-btn variant="text" value="view">
             View
-            <v-icon right dark>computer</v-icon>
+            <v-icon right dark>{{ mdiMonitor }}</v-icon>
           </v-btn>
         </v-btn-toggle>
-      </v-flex>
+      </v-container>
 
       <!-- Player -->
-      <v-flex v-if="shareOrView === 'view'" xs12 sm10 offset-sm1>
+      <div v-if="shareOrView === 'view'" xs12 sm10 offset-sm1>
         <div ref="videoContainerRef">
           <video ref="video0Ref" style="display: none"></video>
           <video ref="video1Ref" style="display: none"></video>
@@ -25,11 +25,11 @@
         <v-icon v-if="showFullscreenButton"
                 v-on:click="fullScreen()"
                 style="font-size: 2em;">
-          fullscreen
+          {{ mdiFullscreen }}
         </v-icon>
-      </v-flex>
+      </div>
 
-      <v-flex xs12 sm8 offset-sm2 offset-md3 md6>
+      <v-container xs12 sm8 offset-sm2 offset-md3 md6>
         <v-card style="padding: 1em;">
           <!-- Server URL -->
           <v-text-field type="text" v-model="serverUrl" label="Server URL" />
@@ -40,40 +40,38 @@
                         v-model="passphrase"
                         placeholder="Input passphrase"
                         :type="showPassphrase ? 'text' : 'password'"
-                        :append-icon="showPassphrase ? 'visibility' : 'visibility_off'"
+                        :append-icon="showPassphrase ? mdiEye : mdiEyeOff"
                         @click:append="showPassphrase = !showPassphrase"
           />
 
           <v-btn v-if="shareOrView === 'share'"
                  color="primary"
                  v-on:click="shareScreen()"
-                 block
                  :disabled="!enableActionButton">
             Share
-            <v-icon right dark>screen_share</v-icon>
+            <v-icon right dark>{{ mdiMonitorShare }}</v-icon>
           </v-btn>
 
           <v-btn v-if="shareOrView === 'view'"
                  color="secondary"
                  v-on:click="viewScreen()"
-                 block
                  :disabled="!enableActionButton">
             View
-            <v-icon right dark>computer</v-icon>
+            <v-icon right dark>{{ mdiMonitor }}</v-icon>
           </v-btn>
         </v-card>
-      </v-flex>
-    </v-layout>
+      </v-container>
+    </v-row>
   </v-container>
 </template>
 
 <script setup lang="ts">
-/* tslint:disable:no-console */
 import { ref } from 'vue';
 import MediaStreamRecorder from 'msr';
 import urlJoin from 'url-join';
 import * as t from 'io-ts';
 import screenfull from 'screenfull';
+import {mdiEye, mdiEyeOff, mdiMonitorShare, mdiMonitor, mdiFullscreen} from "@mdi/js";
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {

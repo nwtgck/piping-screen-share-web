@@ -1,12 +1,12 @@
 <template>
-  <v-app id="app">
+  <v-app>
     <h1>Piping Screen Share</h1>
     <PipingScreenShare />
   </v-app>
 </template>
 
 <script setup lang="ts">
-import PipingScreenShare from './components/PipingScreenShare.vue';
+import PipingScreenShare from '@/components/PipingScreenShare.vue';
 
 </script>
 

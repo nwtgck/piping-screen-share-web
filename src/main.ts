@@ -1,17 +1,21 @@
-// (from: https://vuetifyjs.com/en/framework/icons#icons)
-import 'material-design-icons-iconfont/dist/material-design-icons.css';
-import Vue from 'vue';
-import App from './App.vue';
-import './registerServiceWorker';
-import Vuetify from 'vuetify';
-import vuetify from './plugins/vuetify';
-import 'vuetify/dist/vuetify.min.css';
+import { createApp } from 'vue'
+import App from './App.vue'
+import 'vuetify/styles'
+import { createVuetify } from 'vuetify'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
+import { aliases, mdi } from 'vuetify/iconsets/mdi-svg'
 
-Vue.config.productionTip = false;
+const vuetify = createVuetify({
+  components,
+  directives,
+  icons: {
+    defaultSet: 'mdi',
+    aliases,
+    sets: {
+      mdi,
+    },
+  },
+})
 
-Vue.use(Vuetify);
-
-new Vue({
-  vuetify,
-  render: (h) => h(App),
-}).$mount('#app');
+createApp(App).use(vuetify).mount('#app')
