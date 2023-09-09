@@ -47,7 +47,8 @@
           <v-btn v-if="shareOrView === 'share'"
                  color="primary"
                  v-on:click="shareScreen()"
-                 :disabled="!enableActionButton">
+                 :disabled="!enableActionButton"
+                 style="width: 100%">
             Share
             <v-icon right dark>{{ mdiMonitorShare }}</v-icon>
           </v-btn>
@@ -55,7 +56,8 @@
           <v-btn v-if="shareOrView === 'view'"
                  color="secondary"
                  v-on:click="viewScreen()"
-                 :disabled="!enableActionButton">
+                 :disabled="!enableActionButton"
+                 style="width: 100%">
             View
             <v-icon right dark>{{ mdiMonitor }}</v-icon>
           </v-btn>
