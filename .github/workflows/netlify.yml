@@ -1,7 +1,7 @@
 name: Build and Deploy to Netlify
 on:
   push:
-  pull_request:
+
 jobs:
   build:
     runs-on: ubuntu-20.04
