@@ -146,14 +146,14 @@ const IvAesGcm = {
   },
 };
 
-function encodeSeqNum(seqNum: number): ArrayBuffer {
-  const view = new DataView(new ArrayBuffer(4));
-  view.setUint32(0, seqNum, false);
+function encodeTimestamp(timestamp: bigint): ArrayBuffer {
+  const view = new DataView(new ArrayBuffer(8));
+  view.setBigUint64(0, timestamp, false);
   return view.buffer;
 }
 
-function decodeSeqNum(buf: ArrayBuffer): number {
-  return new DataView(buf).getUint32(0, false);
+function decodeTimestamp(buf: ArrayBuffer): bigint {
+  return new DataView(buf).getBigUint64(0, false);
 }
 
 function parseHashAsQuery(): URLSearchParams {
@@ -193,35 +193,37 @@ async function shareScreen() {
   // Disable the button
   enableActionButton.value = false;
 
-  const seqNumToAbortController: Map<number, AbortController> = new Map();
+  const timestampToAbortController: Map<bigint, AbortController> = new Map();
 
   const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
   const mediaRecorder = new MediaStreamRecorder(stream);
   mediaRecorder.mimeType = 'video/mp4';
 
-  let seqNum = 0;
+  let chunkNum = 0;
   mediaRecorder.ondataavailable = async (blob: Blob) => {
+    const timestamp: bigint = BigInt(Date.now());
+
     // Encrypt
     const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
-        await blobToArrayBuffer(new Blob([encodeSeqNum(seqNum), blob])),
-        passphrase.value,
+      await blobToArrayBuffer(new Blob([encodeTimestamp(timestamp), blob])),
+      passphrase.value,
     );
 
-    const existingAbortController: AbortController | undefined = seqNumToAbortController.get(seqNum);
+    const existingAbortController: AbortController | undefined = timestampToAbortController.get(timestamp);
     if (existingAbortController !== undefined) {
-      seqNumToAbortController.delete(seqNum);
+      timestampToAbortController.delete(timestamp);
       existingAbortController.abort();
     }
 
     const abortController = new AbortController();
     // Send a blob
-    fetch(createServerUrl(serverUrl.value, screenId.value, seqNum % 2), {
+    fetch(createServerUrl(serverUrl.value, screenId.value, chunkNum), {
       method: 'POST',
       body: encryptedBlob,
       signal: abortController.signal,
     });
-    seqNumToAbortController.set(seqNum, abortController);
-    seqNum++;
+    timestampToAbortController.set(timestamp, abortController);
+    chunkNum = (chunkNum + 1) % 2;
   };
 
   mediaRecorder.start(500);
@@ -232,14 +234,14 @@ async function viewScreen() {
   enableActionButton.value = false;
 
   // Queue of blob URL
-  const blobUrlQueue: Array<{ blobUrl: string, seqNum: number }> = [];
+  const blobUrlQueue: Array<{ blobUrl: string, timestamp: bigint }> = [];
   let active: HTMLVideoElement = video0Ref.value!;
   let hidden: HTMLVideoElement = video1Ref.value!;
 
   // For waiting the buffer filled
   let waitDoubleBufferResolve: (() => void) | null = null;
   // Played seq number
-  let prevPlayedSeqNum: number | undefined;
+  let prevPlayedTimestamp: bigint | undefined;
 
   // Double-buffered
   async function doubleBuffer() {
@@ -257,8 +259,8 @@ async function viewScreen() {
     [active, hidden] = [hidden, active];
     active.play();
     // NOTE: It is never undefined logically because the queue is not empty
-    const {blobUrl, seqNum} = blobUrlQueue.shift()!;
-    prevPlayedSeqNum = seqNum;
+    const {blobUrl, timestamp} = blobUrlQueue.shift()!;
+    prevPlayedTimestamp = timestamp;
     hidden.src = blobUrl;
     active.style.display = '';
     hidden.style.display = 'none';
@@ -308,15 +310,17 @@ async function viewScreen() {
       );
 
       // Get seq number
-      const seqNum = decodeSeqNum(decrypted.slice(0, 4));
+      const timestamp = decodeTimestamp(decrypted.slice(0, 8));
+      console.log("timestamp=", timestamp, new Date(Number(timestamp)));
 
       // Skip if the screen is older than played one
-      if (prevPlayedSeqNum !== undefined && seqNum < prevPlayedSeqNum) {
+      if (prevPlayedTimestamp !== undefined && timestamp < prevPlayedTimestamp) {
+        console.log("skip", "prevPlayedTimestamp=", prevPlayedTimestamp, "timestamp=", timestamp);
         continue;
       }
 
       // Get a blob
-      const blob: Blob = new Blob([decrypted.slice(4)], {type: 'video/mp4'});
+      const blob: Blob = new Blob([decrypted.slice(8)], {type: 'video/mp4'});
 
       if (blob.size === 0) {
         console.log('blob is empty');
@@ -327,7 +331,7 @@ async function viewScreen() {
       const blobUrl = URL.createObjectURL(blob);
       blobUrlQueue.push({
         blobUrl,
-        seqNum,
+        timestamp,
       });
 
       if (!firstPlayDone && blobUrlQueue.length >= 2) {
@@ -343,7 +347,7 @@ async function viewScreen() {
         // NOTE: You can chane the threshold >= n
         if (blobUrlQueue.length >= 1 && waitDoubleBufferResolve !== null) {
           // Resolve
-          (waitDoubleBufferResolve as () => void)();
+          waitDoubleBufferResolve!();
           // Release
           waitDoubleBufferResolve = null;
         }
