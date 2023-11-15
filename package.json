@@ -14,7 +14,7 @@
     "screenfull": "^6.0.2",
     "url-join": "^5.0.0",
     "vue": "^3.2.13",
-    "vuetify": "^3.3.15"
+    "vuetify": "^3.4.1"
   },
   "devDependencies": {
     "@mdi/js": "^7.2.96",
