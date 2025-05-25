@@ -193,37 +193,45 @@ async function shareScreen() {
   // Disable the button
   enableActionButton.value = false;
 
-  const timestampToAbortController: Map<bigint, AbortController> = new Map();
-
   const stream = await (navigator.mediaDevices as any).getDisplayMedia({video: true});
   const mediaRecorder = new MediaStreamRecorder(stream);
   mediaRecorder.mimeType = 'video/mp4';
 
-  let chunkNum = 0;
+  type Slot = { cycleNum: number }
+  let prevCancelResolve = (_: "canceled") => {};
+  const slots: Array<Promise<Slot>> = Array(2).fill(undefined).map((_, i) => Promise.resolve({cycleNum: i}));
   mediaRecorder.ondataavailable = async (blob: Blob) => {
     const timestamp: bigint = BigInt(Date.now());
-
+    console.debug("share timestamp", timestamp);
     // Encrypt
     const encryptedBlob: Blob = await IvAesGcm.encryptAsBlob(
       await blobToArrayBuffer(new Blob([encodeTimestamp(timestamp), blob])),
       passphrase.value,
     );
-
-    const existingAbortController: AbortController | undefined = timestampToAbortController.get(timestamp);
-    if (existingAbortController !== undefined) {
-      timestampToAbortController.delete(timestamp);
-      existingAbortController.abort();
+    prevCancelResolve("canceled");
+    let {promise: canceledPromise, resolve: cancelResolve} = Promise.withResolvers<"canceled">();
+    prevCancelResolve = cancelResolve;
+    const availableSlot: {cycleNum: number} | "canceled" = await Promise.any([...slots, canceledPromise]);
+    if (availableSlot === "canceled") {
+      console.debug("canceled timestamp", timestamp);
+      return;
     }
-
-    const abortController = new AbortController();
-    // Send a blob
-    fetch(createServerUrl(serverUrl.value, screenId.value, chunkNum), {
-      method: 'POST',
-      body: encryptedBlob,
-      signal: abortController.signal,
-    });
-    timestampToAbortController.set(timestamp, abortController);
-    chunkNum = (chunkNum + 1) % 2;
+    slots[availableSlot.cycleNum] = (async () => {
+      try {
+        const res = await fetch(createServerUrl(serverUrl.value, screenId.value, availableSlot.cycleNum), {
+          method: 'POST',
+          body: encryptedBlob,
+        });
+        await res.text();
+        if (res.status !== 200) {
+          throw new Error(`status is not 200, ${res.status}`);
+        }
+      } catch (e) {
+        console.error("failed to send chunk", e);
+      } finally {
+        return { cycleNum: availableSlot.cycleNum };
+      }
+    })();
   };
 
   mediaRecorder.start(500);
